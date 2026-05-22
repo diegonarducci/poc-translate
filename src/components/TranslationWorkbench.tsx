@@ -49,6 +49,31 @@ type NewPatientFormState = {
 
 type PersistenceStatus = "ready" | "disabled" | "syncing" | "error";
 
+function isLocale(value: unknown): value is Locale {
+  return value === "pt-BR" || value === "en-US" || value === "es-ES";
+}
+
+function isPatientClinicalSummary(value: unknown): value is PatientClinicalSummary {
+  if (!value || typeof value !== "object") return false;
+
+  const patient = value as Partial<PatientClinicalSummary>;
+  return (
+    typeof patient.id === "string" &&
+    typeof patient.name === "string" &&
+    typeof patient.age === "number" &&
+    isLocale(patient.sourceLocale) &&
+    typeof patient.lastUpdated === "string" &&
+    Boolean(patient.profile) &&
+    Boolean(patient.allergies) &&
+    Boolean(patient.medicalHistory) &&
+    Array.isArray(patient.vaccines) &&
+    Array.isArray(patient.documents) &&
+    Array.isArray(patient.emergencyContacts) &&
+    Array.isArray(patient.diaryEntries) &&
+    Array.isArray(patient.travelAlerts)
+  );
+}
+
 function allAllergies(patient: PatientClinicalSummary) {
   return [
     ...patient.allergies.medication,
@@ -404,6 +429,9 @@ export function TranslationWorkbench({ patients }: Props) {
   const [persistenceMessage, setPersistenceMessage] = useState<string>(
     "Carregando pacientes do Firebase..."
   );
+  const [patientEditorJson, setPatientEditorJson] = useState("");
+  const [patientEditorError, setPatientEditorError] = useState<string | null>(null);
+  const [isSavingEdits, setIsSavingEdits] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -497,6 +525,9 @@ export function TranslationWorkbench({ patients }: Props) {
         sourceLocale: selectedPatient.sourceLocale
       };
     });
+
+    setPatientEditorJson(JSON.stringify(selectedPatient, null, 2));
+    setPatientEditorError(null);
   }, [selectedPatient]);
 
   const providerStatusMap = useMemo(
@@ -582,6 +613,62 @@ export function TranslationWorkbench({ patients }: Props) {
       );
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleSavePatientEdits() {
+    if (!selectedPatient) return;
+
+    setPatientEditorError(null);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(patientEditorJson);
+    } catch {
+      setPatientEditorError("JSON inválido. Revise a sintaxe antes de salvar.");
+      return;
+    }
+
+    if (!isPatientClinicalSummary(parsed)) {
+      setPatientEditorError(
+        "Estrutura inválida. Mantenha os campos principais do paciente (id, nome, idade, profile, allergies, medicalHistory)."
+      );
+      return;
+    }
+
+    const editedPatient = {
+      ...parsed,
+      id: selectedPatient.id,
+      lastUpdated: new Date().toISOString().slice(0, 10)
+    } as PatientClinicalSummary;
+
+    setPatientList((current) =>
+      current.map((patient) =>
+        patient.id === selectedPatient.id ? editedPatient : patient
+      )
+    );
+    setResults([]);
+
+    if (persistenceStatus === "disabled") {
+      setPersistenceMessage("Paciente editado localmente.");
+      return;
+    }
+
+    setIsSavingEdits(true);
+    setPersistenceStatus("syncing");
+    setPersistenceMessage("Salvando edição no Firebase...");
+
+    try {
+      await savePatientToFirestore(editedPatient);
+      setPersistenceStatus("ready");
+      setPersistenceMessage("Paciente atualizado no Firebase.");
+    } catch {
+      setPersistenceStatus("error");
+      setPersistenceMessage(
+        "Paciente atualizado localmente, mas falhou ao sincronizar no Firebase."
+      );
+    } finally {
+      setIsSavingEdits(false);
     }
   }
 
@@ -693,6 +780,33 @@ export function TranslationWorkbench({ patients }: Props) {
                 {persistenceMessage}
               </p>
             </div>
+          </section>
+
+          <section className="rail-section">
+            <h2 className="section-title">
+              <FileText size={17} />
+              Editar paciente (JSON)
+            </h2>
+            <label className="field-label" htmlFor="patientEditorJson">
+              Dados completos
+            </label>
+            <textarea
+              className="textarea"
+              id="patientEditorJson"
+              rows={12}
+              value={patientEditorJson}
+              onChange={(event) => setPatientEditorJson(event.target.value)}
+              spellCheck={false}
+            />
+            {patientEditorError && <p className="sync-note error">{patientEditorError}</p>}
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={handleSavePatientEdits}
+              disabled={isSavingEdits || !patientEditorJson.trim()}
+            >
+              {isSavingEdits ? "Salvando..." : "Salvar edição"}
+            </button>
           </section>
 
           <section className="rail-section">

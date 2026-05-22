@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:firestore": "tsx src/scripts/seed-firestore.ts",
+    "deploy:web": "bash scripts/deploy-web.sh",
+    "deploy:libretranslate": "bash scripts/deploy-libretranslate.sh",
+    "deploy:hosting": "firebase deploy --only hosting,firestore:rules"
   },
   "dependencies": {
     "firebase": "^12.13.0",
@@ -28,6 +32,7 @@
     "eslint": "^9.19.0",
     "eslint-config-next": "^15.1.6",
     "jsdom": "^25.0.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.7.3",
     "vitest": "^2.1.9"
   },

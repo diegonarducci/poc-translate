@@ -37,6 +37,7 @@ export type TranslateProvidersOptions = {
 };
 
 const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_LIBRETRANSLATE_TIMEOUT_MS = 120000;
 
 const defaultAdapters: Required<TranslationAdapters> = {
   google: translateWithGoogle,
@@ -73,6 +74,26 @@ function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && error.message.toLowerCase().includes("tempo limite");
 }
 
+function getProviderTimeoutMs(
+  provider: TranslationProvider,
+  options: TranslateProvidersOptions
+): number {
+  if (options.timeoutMs) {
+    return options.timeoutMs;
+  }
+
+  if (provider === "libretranslate") {
+    const configured = Number(process.env.LIBRETRANSLATE_TIMEOUT_MS);
+    if (Number.isFinite(configured) && configured > 0) {
+      return configured;
+    }
+
+    return DEFAULT_LIBRETRANSLATE_TIMEOUT_MS;
+  }
+
+  return DEFAULT_TIMEOUT_MS;
+}
+
 async function translateOneProvider(
   provider: TranslationProvider,
   input: TranslateProvidersInput,
@@ -92,7 +113,7 @@ async function translateOneProvider(
 
   try {
     const adapter = options.adapters?.[provider] || defaultAdapters[provider];
-    const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timeoutMs = getProviderTimeoutMs(provider, options);
     let translatedPatient: PatientClinicalSummary;
 
     if (provider === "openai") {

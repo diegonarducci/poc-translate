@@ -8,6 +8,54 @@ type LibreTranslateResponse = {
   error?: string;
 };
 
+const DEFAULT_LIBRETRANSLATE_CONCURRENCY = 4;
+
+function getLibreTranslateConcurrency(): number {
+  const configured = Number(process.env.LIBRETRANSLATE_CONCURRENCY);
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.floor(configured);
+  }
+
+  return DEFAULT_LIBRETRANSLATE_CONCURRENCY;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex]);
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return results;
+}
+
+async function readLibreTranslateResponse(
+  response: Response
+): Promise<LibreTranslateResponse> {
+  const rawBody = await response.text();
+
+  try {
+    return rawBody ? (JSON.parse(rawBody) as LibreTranslateResponse) : {};
+  } catch {
+    const preview = rawBody.replace(/\s+/g, " ").trim().slice(0, 160);
+    throw new Error(
+      `LibreTranslate retornou resposta inesperada (${response.status}): ${preview}`
+    );
+  }
+}
+
 async function translateOne(
   text: string,
   source: string,
@@ -33,7 +81,7 @@ async function translateOne(
     }
   );
 
-  const payload = (await response.json()) as LibreTranslateResponse;
+  const payload = await readLibreTranslateResponse(response);
 
   if (!response.ok) {
     throw new Error(payload.error || "Falha na tradução via LibreTranslate.");
@@ -50,8 +98,10 @@ export const translateWithLibreTranslate: SegmentTranslationAdapter = async ({
   const source = toBaseLanguage(sourceLocale);
   const target = toBaseLanguage(targetLocale);
 
-  const translatedTexts = await Promise.all(
-    segments.map((segment) => translateOne(segment.text, source, target))
+  const translatedTexts = await mapWithConcurrency(
+    segments,
+    getLibreTranslateConcurrency(),
+    (segment) => translateOne(segment.text, source, target)
   );
 
   return cloneSegmentsWithText(segments, translatedTexts);

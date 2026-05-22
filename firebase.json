@@ -1,4 +1,21 @@
 {
+  "hosting": {
+    "public": "hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "poc-traducao-web",
+          "region": "us-central1"
+        }
+      }
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules"
   }

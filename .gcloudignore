@@ -1,0 +1,10 @@
+.git
+.gitignore
+.next
+coverage
+node_modules
+.env
+.env.local
+.env.*.local
+.firebase
+firebase-debug.log

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TranslationWorkbench } from "@/components/TranslationWorkbench";
@@ -110,5 +110,37 @@ describe("TranslationWorkbench", () => {
     expect(
       await screen.findByRole("option", { name: /paciente teste manual/i })
     ).toBeInTheDocument();
+  });
+
+  it("allows editing selected patient data", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+
+      if (url.includes("/api/providers")) {
+        return Response.json(providerPayload);
+      }
+
+      return Response.json({ results: [] });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TranslationWorkbench patients={samplePatients} />);
+
+    const editor = await screen.findByLabelText(/dados completos/i);
+    const payload = JSON.parse((editor as HTMLTextAreaElement).value);
+    payload.name = "Marina Alves Atualizada";
+    payload.profile.nationality = "portuguesa";
+
+    fireEvent.change(editor, {
+      target: { value: JSON.stringify(payload, null, 2) }
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /salvar edição/i }));
+
+    expect(
+      await screen.findByRole("option", { name: /marina alves atualizada/i })
+    ).toBeInTheDocument();
+    expect(screen.getByText("portuguesa")).toBeInTheDocument();
   });
 });

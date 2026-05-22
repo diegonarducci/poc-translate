@@ -3,6 +3,9 @@ node_modules
 out
 coverage
 .env
+.env.production
 .env*.local
 *.tsbuildinfo
 .DS_Store
+.firebase
+firebase-debug.log
