@@ -164,7 +164,8 @@ h1 {
 }
 
 .select,
-.textarea {
+.textarea,
+.text-input {
   background: white;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -176,9 +177,44 @@ h1 {
 }
 
 .select:focus,
-.textarea:focus {
+.textarea:focus,
+.text-input:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.16);
+}
+
+.new-patient-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.new-patient-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(88px, 1fr) minmax(0, 1.4fr);
+}
+
+.sync-note {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+
+.sync-note.ready {
+  color: var(--leaf);
+}
+
+.sync-note.syncing {
+  color: var(--teal-dark);
+}
+
+.sync-note.disabled {
+  color: var(--muted);
+}
+
+.sync-note.error {
+  color: var(--coral);
 }
 
 .patient-meta {

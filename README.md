@@ -28,6 +28,10 @@ docker run --rm -it -p 5001:5000 libretranslate/libretranslate
 
 - `OPENAI_API_KEY`
 - `OPENAI_TRANSLATION_MODEL`, default `gpt-5.2`
+- `NEXT_PUBLIC_FIREBASE_API_KEY`, opcional para persistir pacientes
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, opcional para persistir pacientes
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, opcional para persistir pacientes
+- `NEXT_PUBLIC_FIREBASE_APP_ID`, opcional para persistir pacientes
 - `GOOGLE_CLOUD_PROJECT`
 - `GOOGLE_CLOUD_QUOTA_PROJECT`, opcional (se omitido, usa `GOOGLE_CLOUD_PROJECT`)
 - `GOOGLE_TRANSLATE_LOCATION`, default `global`
@@ -35,6 +39,26 @@ docker run --rm -it -p 5001:5000 libretranslate/libretranslate
 - `LIBRETRANSLATE_API_KEY`, opcional
 
 Para Google, configure ADC com `gcloud auth application-default login`.
+
+## Persistência Firebase (opcional)
+
+Quando as variáveis `NEXT_PUBLIC_FIREBASE_*` estiverem configuradas, os novos pacientes
+criados na UI são salvos na coleção `patients` do Cloud Firestore.
+
+Regras mínimas para POC de teste manual:
+
+```txt
+rules_version = '2';
+service cloud.firestore {
+	match /databases/{database}/documents {
+		match /patients/{patientId} {
+			allow read, write: if true;
+		}
+	}
+}
+```
+
+Sem Firebase configurado, a aplicação funciona normalmente usando apenas os pacientes locais.
 
 ## Testes
 

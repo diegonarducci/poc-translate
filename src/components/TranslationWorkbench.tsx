@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { LOCALES } from "@/lib/locales";
+import {
+  listPatientsFromFirestore,
+  savePatientToFirestore
+} from "@/lib/patient-repository";
 import { PROVIDER_LABELS, PROVIDERS } from "@/lib/translation/provider-config";
 import type {
   Locale,
@@ -37,6 +41,14 @@ type Props = {
   patients: PatientClinicalSummary[];
 };
 
+type NewPatientFormState = {
+  name: string;
+  age: string;
+  sourceLocale: Locale;
+};
+
+type PersistenceStatus = "ready" | "disabled" | "syncing" | "error";
+
 function allAllergies(patient: PatientClinicalSummary) {
   return [
     ...patient.allergies.medication,
@@ -47,6 +59,56 @@ function allAllergies(patient: PatientClinicalSummary) {
 
 function chooseDefaultTarget(sourceLocale: Locale): Locale {
   return sourceLocale === "en-US" ? "pt-BR" : "en-US";
+}
+
+function splitName(fullName: string): { firstName: string; lastName: string } {
+  const trimmed = fullName.trim();
+  if (!trimmed) return { firstName: "Paciente", lastName: "Teste" };
+
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "Teste" };
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" ")
+  };
+}
+
+function nextPatientId(existingPatients: PatientClinicalSummary[]): string {
+  const maxNumericId = existingPatients.reduce((max, patient) => {
+    const match = /^PAC-(\d+)$/.exec(patient.id);
+    if (!match) return max;
+    const value = Number.parseInt(match[1], 10);
+    return Number.isNaN(value) ? max : Math.max(max, value);
+  }, 0);
+
+  return `PAC-${String(maxNumericId + 1).padStart(3, "0")}`;
+}
+
+function buildPatientFromTemplate(
+  template: PatientClinicalSummary,
+  form: NewPatientFormState,
+  existingPatients: PatientClinicalSummary[]
+): PatientClinicalSummary {
+  const id = nextPatientId(existingPatients);
+  const age = Math.max(1, Number.parseInt(form.age, 10) || template.age);
+  const { firstName, lastName } = splitName(form.name);
+  const nowIso = new Date().toISOString().slice(0, 10);
+  const clone = structuredClone(template);
+
+  clone.id = id;
+  clone.name = form.name.trim();
+  clone.age = age;
+  clone.sourceLocale = form.sourceLocale;
+  clone.lastUpdated = nowIso;
+  clone.profile.firstName = firstName;
+  clone.profile.lastName = lastName;
+  clone.documents = clone.documents.map((document) => ({
+    ...document,
+    fileName: `${id.toLowerCase()}-${document.fileName}`
+  }));
+
+  return clone;
 }
 
 function formatWarnings(result: TranslationResult): string[] {
@@ -314,11 +376,17 @@ function ResultCard({ result }: { result: TranslationResult }) {
 }
 
 export function TranslationWorkbench({ patients }: Props) {
+  const [patientList, setPatientList] = useState<PatientClinicalSummary[]>(patients);
   const [selectedPatientId, setSelectedPatientId] = useState(patients[0]?.id || "");
   const selectedPatient = useMemo(
-    () => patients.find((patient) => patient.id === selectedPatientId) || patients[0],
-    [patients, selectedPatientId]
+    () => patientList.find((patient) => patient.id === selectedPatientId) || patientList[0],
+    [patientList, selectedPatientId]
   );
+  const [newPatientForm, setNewPatientForm] = useState<NewPatientFormState>({
+    name: "",
+    age: "",
+    sourceLocale: selectedPatient?.sourceLocale || "pt-BR"
+  });
   const [sourceLocale, setSourceLocale] = useState<Locale>(
     selectedPatient?.sourceLocale || "pt-BR"
   );
@@ -331,6 +399,65 @@ export function TranslationWorkbench({ patients }: Props) {
   const [results, setResults] = useState<TranslationResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [persistenceStatus, setPersistenceStatus] =
+    useState<PersistenceStatus>("syncing");
+  const [persistenceMessage, setPersistenceMessage] = useState<string>(
+    "Carregando pacientes do Firebase..."
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPatients() {
+      try {
+        const persisted = await listPatientsFromFirestore();
+
+        if (!active) return;
+
+        if (persisted === null) {
+          setPatientList(patients);
+          setPersistenceStatus("disabled");
+          setPersistenceMessage(
+            "Firebase não configurado. Usando apenas pacientes locais."
+          );
+          return;
+        }
+
+        if (persisted.length > 0) {
+          setPatientList(persisted);
+          setPersistenceStatus("ready");
+          setPersistenceMessage("Pacientes carregados do Firebase.");
+          return;
+        }
+
+        setPatientList(patients);
+        setPersistenceStatus("ready");
+        setPersistenceMessage("Firebase ativo. Nenhum paciente salvo ainda.");
+      } catch {
+        if (!active) return;
+        setPatientList(patients);
+        setPersistenceStatus("error");
+        setPersistenceMessage(
+          "Falha ao acessar Firebase. Continuando com pacientes locais."
+        );
+      }
+    }
+
+    loadPatients();
+
+    return () => {
+      active = false;
+    };
+  }, [patients]);
+
+  useEffect(() => {
+    setSelectedPatientId((current) => {
+      if (current && patientList.some((patient) => patient.id === current)) {
+        return current;
+      }
+      return patientList[0]?.id || "";
+    });
+  }, [patientList]);
 
   useEffect(() => {
     let active = true;
@@ -359,6 +486,19 @@ export function TranslationWorkbench({ patients }: Props) {
     );
   }, [selectedPatient]);
 
+  useEffect(() => {
+    if (!selectedPatient) return;
+
+    setNewPatientForm((current) => {
+      if (current.name.trim()) return current;
+      return {
+        name: `${selectedPatient.profile.firstName} ${selectedPatient.profile.lastName}`,
+        age: String(selectedPatient.age),
+        sourceLocale: selectedPatient.sourceLocale
+      };
+    });
+  }, [selectedPatient]);
+
   const providerStatusMap = useMemo(
     () => new Map(providerStatuses.map((status) => [status.provider, status])),
     [providerStatuses]
@@ -370,6 +510,42 @@ export function TranslationWorkbench({ patients }: Props) {
         ? current.filter((item) => item !== provider)
         : [...current, provider]
     );
+  }
+
+  async function handleCreatePatient() {
+    const basePatient = selectedPatient || patientList[0];
+    const trimmedName = newPatientForm.name.trim();
+
+    if (!basePatient || !trimmedName) return;
+
+    const created = buildPatientFromTemplate(
+      basePatient,
+      { ...newPatientForm, name: trimmedName },
+      patientList
+    );
+
+    setPatientList((current) => [created, ...current]);
+    setSelectedPatientId(created.id);
+    setSourceLocale(created.sourceLocale);
+    setTargetLocale(chooseDefaultTarget(created.sourceLocale));
+    setResults([]);
+    setError(null);
+
+    if (persistenceStatus === "disabled") return;
+
+    setPersistenceStatus("syncing");
+    setPersistenceMessage("Salvando novo paciente no Firebase...");
+
+    try {
+      await savePatientToFirestore(created);
+      setPersistenceStatus("ready");
+      setPersistenceMessage("Paciente salvo no Firebase.");
+    } catch {
+      setPersistenceStatus("error");
+      setPersistenceMessage(
+        "Paciente criado localmente, mas não foi possível salvar no Firebase."
+      );
+    }
   }
 
   async function handleTranslate() {
@@ -449,12 +625,74 @@ export function TranslationWorkbench({ patients }: Props) {
               value={selectedPatientId}
               onChange={(event) => setSelectedPatientId(event.target.value)}
             >
-              {patients.map((patient) => (
+              {patientList.map((patient) => (
                 <option key={patient.id} value={patient.id}>
                   {patient.name} · {patient.id}
                 </option>
               ))}
             </select>
+
+            <div className="new-patient-grid">
+              <label className="field-label" htmlFor="newPatientName">
+                Novo paciente
+              </label>
+              <input
+                className="text-input"
+                id="newPatientName"
+                value={newPatientForm.name}
+                onChange={(event) =>
+                  setNewPatientForm((current) => ({
+                    ...current,
+                    name: event.target.value
+                  }))
+                }
+                placeholder="Nome completo"
+              />
+              <div className="new-patient-row">
+                <input
+                  className="text-input"
+                  type="number"
+                  min={1}
+                  value={newPatientForm.age}
+                  onChange={(event) =>
+                    setNewPatientForm((current) => ({
+                      ...current,
+                      age: event.target.value
+                    }))
+                  }
+                  placeholder="Idade"
+                  aria-label="Idade do novo paciente"
+                />
+                <select
+                  className="select"
+                  value={newPatientForm.sourceLocale}
+                  onChange={(event) =>
+                    setNewPatientForm((current) => ({
+                      ...current,
+                      sourceLocale: event.target.value as Locale
+                    }))
+                  }
+                  aria-label="Idioma base do novo paciente"
+                >
+                  {LOCALES.map((locale) => (
+                    <option key={locale.code} value={locale.code}>
+                      {locale.shortLabel}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={handleCreatePatient}
+                disabled={!newPatientForm.name.trim()}
+              >
+                Criar paciente
+              </button>
+              <p className={`sync-note ${persistenceStatus}`} role="status">
+                {persistenceMessage}
+              </p>
+            </div>
           </section>
 
           <section className="rail-section">

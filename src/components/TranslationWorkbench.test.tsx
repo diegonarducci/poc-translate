@@ -85,4 +85,30 @@ describe("TranslationWorkbench", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  it("allows creating a new patient for manual testing", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+
+      if (url.includes("/api/providers")) {
+        return Response.json(providerPayload);
+      }
+
+      return Response.json({ results: [] });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TranslationWorkbench patients={samplePatients} />);
+
+    const nameInput = screen.getByPlaceholderText(/nome completo/i);
+    const createButton = screen.getByRole("button", { name: /criar paciente/i });
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Paciente Teste Manual");
+    await userEvent.click(createButton);
+
+    expect(
+      await screen.findByRole("option", { name: /paciente teste manual/i })
+    ).toBeInTheDocument();
+  });
 });
