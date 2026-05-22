@@ -20,6 +20,8 @@ export const translateWithGoogle: SegmentTranslationAdapter = async ({
     throw new Error("GOOGLE_CLOUD_PROJECT não configurado.");
   }
 
+  const quotaProject = process.env.GOOGLE_CLOUD_QUOTA_PROJECT || project;
+
   const location = process.env.GOOGLE_TRANSLATE_LOCATION || "global";
   const { GoogleAuth } = await import("google-auth-library");
   const auth = new GoogleAuth({
@@ -38,7 +40,8 @@ export const translateWithGoogle: SegmentTranslationAdapter = async ({
       method: "POST",
       headers: {
         Authorization: `Bearer ${token.token}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-goog-user-project": quotaProject
       },
       body: JSON.stringify({
         contents: segments.map((segment) => segment.text),

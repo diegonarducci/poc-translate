@@ -29,6 +29,7 @@ docker run --rm -it -p 5001:5000 libretranslate/libretranslate
 - `OPENAI_API_KEY`
 - `OPENAI_TRANSLATION_MODEL`, default `gpt-5.2`
 - `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_QUOTA_PROJECT`, opcional (se omitido, usa `GOOGLE_CLOUD_PROJECT`)
 - `GOOGLE_TRANSLATE_LOCATION`, default `global`
 - `LIBRETRANSLATE_URL`, default `http://localhost:5000`
 - `LIBRETRANSLATE_API_KEY`, opcional
