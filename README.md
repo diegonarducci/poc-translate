@@ -40,11 +40,16 @@ Backend (Cloud Run):
 - `GOOGLE_TRANSLATE_LOCATION`, default `global`
 - `LIBRETRANSLATE_URL` (URL do serviço LibreTranslate em Cloud Run)
 - `LIBRETRANSLATE_API_KEY`, opcional
+- `LIBRETRANSLATE_CONCURRENCY`, default `4`
+- `LIBRETRANSLATE_TIMEOUT_MS`, default `120000`
 
 Deploy helpers:
 - `PROJECT_ID`, default `poc-translate-497120`
 - `REGION`, default `us-central1`
 - `SERVICE_NAME`, default `poc-traducao-web`
+- `MIN_INSTANCES`, default `1` para LibreTranslate em Cloud Run
+- `CONCURRENCY`, default `4` para LibreTranslate em Cloud Run
+- `OPENAI_SECRET_NAME`, default `OPENAI_API_KEY`
 
 Para Google em desenvolvimento local, configure ADC com `gcloud auth application-default login`.
 
@@ -82,6 +87,8 @@ Arquitetura implementada:
 export PROJECT_ID=poc-translate-497120
 export REGION=us-central1
 export LIBRETRANSLATE_API_KEY="sua-chave-opcional"
+export MIN_INSTANCES=1
+export CONCURRENCY=4
 npm run deploy:libretranslate
 ```
 
@@ -101,9 +108,11 @@ export GOOGLE_CLOUD_PROJECT=poc-translate-497120
 export GOOGLE_CLOUD_QUOTA_PROJECT=poc-translate-497120
 export GOOGLE_TRANSLATE_LOCATION=global
 export LIBRETRANSLATE_URL="https://libretranslate-xxxxx-uc.a.run.app"
+export LIBRETRANSLATE_CONCURRENCY=4
+export LIBRETRANSLATE_TIMEOUT_MS=120000
 # opcional: export LIBRETRANSLATE_API_KEY="..."
-# opção A: usar Secret Manager com segredo OPENAI_API_KEY
-# opção B: export OPENAI_API_KEY="..."
+# default: usar Secret Manager com segredo OPENAI_API_KEY
+# para POC manual, USE_OPENAI_ENV_VAR=1 permite enviar OPENAI_API_KEY como env var
 npm run deploy:web
 ```
 

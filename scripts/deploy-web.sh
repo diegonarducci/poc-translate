@@ -51,7 +51,7 @@ trap cleanup EXIT
 } > "$ENV_PRODUCTION_FILE"
 
 SECRET_ARGS=()
-if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+if [[ "${USE_OPENAI_ENV_VAR:-}" == "1" && -n "${OPENAI_API_KEY:-}" ]]; then
   SECRET_ARGS+=(--set-env-vars "OPENAI_API_KEY=${OPENAI_API_KEY}")
 else
   SECRET_ARGS+=(--set-secrets "OPENAI_API_KEY=${OPENAI_SECRET_NAME}:latest")
